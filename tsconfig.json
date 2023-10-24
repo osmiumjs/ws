@@ -1,0 +1,30 @@
+{
+	"compilerOptions": {
+		"target"                          : "ESNext",
+		"module"                          : "commonjs",
+		"lib"                             : ["ESNext", "DOM"],
+		"outDir"                          : "./dist",
+		"allowSyntheticDefaultImports"    : true,
+		"declaration"                     : true,
+		"emitDecoratorMetadata"           : true,
+		"esModuleInterop"                 : false,
+		"experimentalDecorators"          : true,
+		"incremental"                     : true,
+		"noFallthroughCasesInSwitch"      : true,
+		"noImplicitReturns"               : true,
+		"noImplicitThis"                  : true,
+		"strict"                          : true,
+		"strictBindCallApply"             : true,
+		"strictFunctionTypes"             : true,
+		"strictNullChecks"                : true,
+		"strictPropertyInitialization"    : true,
+		"alwaysStrict"                    : true,
+		"removeComments"                  : true,
+		"resolveJsonModule"               : true,
+		"skipLibCheck"                    : true,
+		"sourceMap"                       : true,
+		"forceConsistentCasingInFileNames": true
+	},
+	"include"        : ["./src/**/*"],
+	"exclude"        : ["node_modules", "dist", "test"]
+}
