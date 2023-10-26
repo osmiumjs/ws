@@ -1,7 +1,7 @@
 import {Events}                              from '@osmium/events';
 import {WSMessage, WSSocket, WSSocketEvents} from '../libs';
 
-import {WebSocket} from 'isomorphic-ws';
+import WebSocket from 'isomorphic-ws';
 
 export class WSClient extends Events<string> {
 	protected readonly version: number = 1;
@@ -11,7 +11,8 @@ export class WSClient extends Events<string> {
 		secure       : false,
 		autoReconnect: true,
 		getPacketID  : () => Events.UID('WSP-'),
-		getCallID    : () => Events.UID('WSC-')
+		getCallID    : () => Events.UID('WSC-'),
+		debug        : () => {}
 	};
 
 	symbols: WSSocket.ISymbols = {
@@ -74,6 +75,10 @@ export class WSClient extends Events<string> {
 		this.serializer = WSMessage.Serializer.createInstance();
 	}
 
+	private debug(...args: any[]) {
+		this.options.debug(...args);
+	}
+
 	async connect(): Promise<boolean> {
 		return new Promise(async (resolve) => {
 			const _close = async () => {
@@ -82,17 +87,29 @@ export class WSClient extends Events<string> {
 				this.tryDisconnect().then();
 			};
 
+			this.debug(`[WSClient.disconnect()]: Connecting`);
+
 			if (this.socket !== null) return resolve(false);
 
 			this.state = WSClient.State.CONNECTING;
 
 			//Make connection
-			const wsNativeSocket = new WebSocket(`${this.options.secure ? 'wss' : 'ws'}://${this.host}`);
+			const _WebSocket = WebSocket?.WebSocket ?? WebSocket;
+			const connectionString = `${this.options.secure ? 'wss' : 'ws'}://${this.host}`;
+			this.debug(`[WSClient.connect()]: Connecting to ${connectionString}`);
+
+			const wsNativeSocket = new _WebSocket(connectionString);
 			this.ws = WSSocketEvents.createInstance(wsNativeSocket, true);
 
 			//Process handshake
 			const id = await this.handShakeHandling(this.ws);
-			if (!id) return _close();
+			if (!id) {
+				this.debug(`[WSClient.connect()]: Handshake not successful`);
+
+				return _close();
+			}
+
+			this.debug(`[WSClient.connect()]: Handshake successful`);
 
 			//Create our socket
 			this.socket = new WSSocket(this.ws, id, {
@@ -102,6 +119,8 @@ export class WSClient extends Events<string> {
 
 			//Set handlers
 			this.socket.events.once(WSSocket.event.DISCONNECTED, async () => {
+				this.debug(`[WSClient.connect() > Event DISCONNECTED]: Start disconnecting`);
+
 				await this.tryDisconnect();
 			});
 
@@ -111,46 +130,80 @@ export class WSClient extends Events<string> {
 			this.state = WSClient.State.CONNECTED;
 			await this.events.emit(WSClient.Events.CONNECTED);
 
+			this.debug(`[WSClient.connect()]: Connect successful`);
+
 			resolve(true);
 		});
 	}
 
 	async handShakeHandling(ws: WSSocketEvents): Promise<WSSocket.ID | null> {
 		const _close = async () => {
+			this.debug(`[WSClient.handShakeHandling()>_close()]: call tryDisconnect`);
 			await this.tryDisconnect();
 
 			return null;
 		};
 
+		this.debug(`[WSClient.handShakeHandling()]: Handshake start`);
+
 		//Request socket id
-		setTimeout(() => ws.send(this.serializer.serializeHSClientServerRequest({
-			version: this.version,
-			payload: {}
-		})).then(), 100);
+		setTimeout(() => {
+			this.debug(`[WSClient.handShakeHandling()]: Handshake request #1`);
+
+			ws.send(this.serializer.serializeHSClientServerRequest({
+				version: this.version,
+				payload: {}
+			})).then();
+		}, 100);
 
 		//Await socket id response
 		const responseRaw = await ws.events.wait<WSSocketEvents.MESSAGE>(WSSocketEvents.event.MESSAGE);
 		const responseRawBinary = responseRaw?.[0]?.data;
-		if (!responseRawBinary) return await _close();
+		if (!responseRawBinary) {
+			this.debug(`[WSClient.handShakeHandling()]: Handshake response #1 - raw - fail`, responseRawBinary);
+
+			return await _close();
+		}
 
 		const response = this.serializer.deserializeHSServerClientResponse(responseRawBinary as ArrayBuffer);
-		if (!response?.success) return await _close();
+		if (!response?.success) {
+			this.debug(`[WSClient.handShakeHandling()]: Handshake response #1 - deserialize - not success`, response);
+
+			return await _close();
+		}
+
+		this.debug(`[WSClient.handShakeHandling()]: Handshake response #1 - ok`, response);
 
 		//Send ready signal
-		await ws.send(this.serializer.serializeHSClientServerResponse<{ jwtToken: string }>({
-			success: true,
-			payload: {
-				jwtToken: this.jwtToken
-			}
-		}));
+		setTimeout(() => {
+			this.debug(`[WSClient.handShakeHandling()]: Handshake request #2`);
+
+			ws.send(this.serializer.serializeHSClientServerResponse<{ jwtToken: string }>({
+				success: true,
+				payload: {
+					jwtToken: this.jwtToken
+				}
+			})).then();
+		}, 20);
 
 		//Await confirmation
 		const responseSecRaw = await ws.events.wait<WSSocketEvents.MESSAGE>(WSSocketEvents.event.MESSAGE);
 		const responseSecRawBinary = responseSecRaw?.[0]?.data;
-		if (!responseSecRawBinary) return await _close();
+		if (!responseSecRawBinary) {
+			this.debug(`[WSClient.handShakeHandling()]: Handshake response #2 - raw - fail`, responseSecRawBinary);
+
+			return await _close();
+		}
 
 		const responseSec = this.serializer.deserializeHSServerClientResponse(responseSecRawBinary as ArrayBuffer);
-		if (!responseSec?.success) return await _close();
+		if (!responseSec?.success) {
+			this.debug(`[WSClient.handShakeHandling()]: Handshake response #2 - deserialize - not success`, responseSec);
+
+			return await _close();
+		}
+
+		this.debug(`[WSClient.handShakeHandling()]: Handshake response #2 - ok`, responseSec);
+		this.debug(`[WSClient.handShakeHandling()]: Handshake finished, id: ${response.id}`);
 
 		return response.id;
 	}
@@ -167,6 +220,7 @@ export class WSClient extends Events<string> {
 		this.state = WSClient.State.DISCONNECTED;
 
 		if (this.socket === null) return;
+		this.debug(`[WSClient.disconnect()]: Disconnect`);
 
 		this.unMapEventsBefore(this.socket);
 		this.socket.unMapEventsBefore(this);
@@ -198,6 +252,7 @@ export namespace WSClient {
 		secure: boolean;
 		getPacketID: Function;
 		getCallID: Function;
+		debug: Function;
 	}
 
 	export enum Events {

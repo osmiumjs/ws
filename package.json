@@ -1,7 +1,7 @@
 {
 	"name"           : "@osmium/ws",
 	"description"    : "Osmium WebSocket library",
-	"version"        : "0.1.0",
+	"version"        : "0.1.3",
 	"license"        : "MIT",
 	"author"         : {
 		"name" : "Vasiliy Isaichkin",
@@ -12,7 +12,7 @@
 	"browser"        : "dist/browser",
 	"scripts"        : {
 		"compile:nodejs" : "tsc",
-		"compile:browser": "webpack && terser --compress --ecma 2017 -o dist/browser/index.js -- dist/browser/index.js && cp dist/index.d.ts dist/browser/",
+ 		"compile:browser": "webpack && terser --compress --ecma 2017 -o dist/browser/index.js -- dist/browser/index.js && cp dist/index.d.ts dist/browser/",
 		"compile"        : "npm run compile:nodejs && npm run compile:browser",
 		"clean:full"     : "npm run clean && rimraf node_modules",
 		"clean"          : "rimraf dist docs defs",
